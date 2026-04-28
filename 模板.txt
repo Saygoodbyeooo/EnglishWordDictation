@@ -1,0 +1,5 @@
+pyramid=金字塔
+graph=图表；曲线图
+establish=建立；创立
+hello=你好
+world=世界

@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>自定义单词默写表（支持TXT导入）</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: "Microsoft YaHei", "SimHei", sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f5f5f5;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #2c3e50;
+            font-size: 24px;
+        }
+
+        .controls {
+            text-align: center;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        button {
+            padding: 8px 16px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #2980b9;
+        }
+
+        button.success {
+            background-color: #2ecc71;
+        }
+        button.success:hover {
+            background-color: #27ae60;
+        }
+
+        button.danger {
+            background-color: #e74c3c;
+        }
+        button.danger:hover {
+            background-color: #c0392b;
+        }
+
+        button.warning {
+            background-color: #f39c12;
+        }
+        button.warning:hover {
+            background-color: #d35400;
+        }
+
+        /* 文件导入样式 */
+        .file-upload {
+            padding: 6px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+            background: white;
+        }
+
+        .word-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+
+        .word-table th,
+        .word-table td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: center;
+        }
+
+        .word-table th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+        }
+
+        .word-table td:nth-child(1),
+        .word-table td:nth-child(2),
+        .word-table td:nth-child(3) {
+            text-align: left;
+        }
+
+        .word-table td:last-child {
+            text-align: center;
+            width: 60px;
+        }
+
+        .my-answer {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            font-family: inherit;
+        }
+        .my-answer:focus {
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 3px rgba(52, 152, 219, 0.5);
+        }
+
+        .correct-answer {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #bbb;
+            border-radius: 4px;
+            font-size: 14px;
+            font-family: inherit;
+            background-color: #f9f9f9;
+            color: #e74c3c;
+            font-weight: bold;
+            display: none;
+        }
+
+        .word-check {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .page-break {
+            page-break-before: always;
+            height: 20px;
+        }
+
+        .page-number {
+            text-align: center;
+            margin-top: 10px;
+            font-size: 12px;
+            color: #999;
+        }
+
+        /* 打印样式 */
+        @media print {
+            body { background: white; padding: 0; font-size: 12px; }
+            .container { box-shadow: none; padding: 0; }
+            .controls { display: none; }
+            h1 { font-size: 18px; margin-bottom: 10px; }
+            .word-table th, .word-table td { padding: 6px; }
+            .my-answer { 
+                border: none; 
+                border-bottom: 1px solid #ddd; 
+                padding: 4px;
+                background: white;
+            }
+            .my-answer::placeholder {
+                opacity: 0;
+                color: transparent;
+            }
+            .correct-answer { display: none !important; }
+            td:last-child, th:last-child { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>自定义单词默写表（支持TXT导入）</h1>
+        
+        <div class="controls">
+            <!-- 新增：TXT文件导入 -->
+            <input type="file" id="fileInput" class="file-upload" accept=".txt">
+            <button onclick="printBlankSheet()">🖨️ 打印默写表</button>
+            <button onclick="selectAll()">✅ 全选</button>
+            <button onclick="unselectAll()">❌ 取消全选</button>
+            <button class="warning" onclick="printSelectedWords()">📄 打印选中</button>
+            <button onclick="saveMyAnswer()">💾 保存答案</button>
+            <button class="success" onclick="toggleCorrectAnswer()">🔍 显示/隐藏答案</button>
+            <button onclick="clearAll()" class="danger">🗑️ 清空所有</button>
+        </div>
+
+        <div id="word-list-container"></div>
+    </div>
+
+    <script>
+        // 初始默认单词（导入后会自动替换）
+        let wordList = [
+            { en: "pyramid", cn: "金字塔" },
+            { en: "graph", cn: "图表；曲线图" }
+        ];
+
+        const WORDS_PER_PAGE = 50;
+
+        // ============== 核心新增：TXT文件导入解析 ==============
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                try {
+                    // 解析文本：按行分割 + 过滤空行
+                    const lines = event.target.result.split('\n').filter(line => line.trim() !== '');
+                    const newWordList = [];
+
+                    // 按模板 英文=中文 解析
+                    lines.forEach(line => {
+                        const parts = line.trim().split('=');
+                        if (parts.length === 2) {
+                            newWordList.push({
+                                en: parts[0].trim(),
+                                cn: parts[1].trim()
+                            });
+                        }
+                    });
+
+                    if (newWordList.length === 0) {
+                        alert('⚠️ 未解析到有效单词，请检查TXT格式：每行 英文=中文');
+                        return;
+                    }
+
+                    // 替换单词列表并重新生成表格
+                    wordList = newWordList;
+                    generateWordList();
+                    alert(`✅ 导入成功！共导入 ${wordList.length} 个单词`);
+                } catch (err) {
+                    alert('❌ 文件解析失败：' + err.message);
+                }
+            };
+            reader.readAsText(file, 'UTF-8');
+        });
+
+        // 生成默写表格
+        function generateWordList() {
+            const container = document.getElementById('word-list-container');
+            container.innerHTML = '';
+            const totalPages = Math.ceil(wordList.length / WORDS_PER_PAGE);
+
+            for (let page = 0; page < totalPages; page++) {
+                if (page > 0) container.innerHTML += '<div class="page-break"></div>';
+                
+                let table = `
+                <table class="word-table">
+                    <thead>
+                        <tr>
+                            <th>英文单词</th>
+                            <th>我的答案</th>
+                            <th>标准答案</th>
+                            <th>勾选</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                `;
+
+                const start = page * WORDS_PER_PAGE;
+                const end = Math.min(start + WORDS_PER_PAGE, wordList.length);
+
+                for (let i = start; i < end; i++) {
+                    table += `
+                        <tr>
+                            <td>${wordList[i].en}</td>
+                            <td><input type="text" class="my-answer" id="my_${i}" placeholder="填写中文"></td>
+                            <td><input type="text" class="correct-answer" id="correct_${i}" value="${wordList[i].cn}" readonly></td>
+                            <td><input type="checkbox" class="word-check" data-index="${i}" tabindex="-1"></td>
+                        </tr>
+                    `;
+                }
+
+                table += `</tbody></table><div class="page-number">第 ${page+1} 页 / 共 ${totalPages} 页</div>`;
+                container.innerHTML += table;
+            }
+            loadMyAnswer();
+        }
+
+        // 全选
+        function selectAll() {
+            document.querySelectorAll('.word-check').forEach(cb => cb.checked = true);
+        }
+
+        // 取消全选
+        function unselectAll() {
+            document.querySelectorAll('.word-check').forEach(cb => cb.checked = false);
+        }
+
+        // 打印空白默写表
+        function printBlankSheet() {
+            document.querySelectorAll('.my-answer').forEach(inp => inp.value = '');
+            document.querySelectorAll('.correct-answer').forEach(ans => ans.style.display = 'none');
+            setTimeout(() => window.print(), 100);
+        }
+
+        // 打印选中单词
+        function printSelectedWords() {
+            const selectedChecks = document.querySelectorAll('.word-check:checked');
+            if (selectedChecks.length === 0) {
+                alert('请先勾选需要打印的单词！');
+                return;
+            }
+
+            const selectedIndexes = Array.from(selectedChecks).map(cb => cb.dataset.index);
+            const printContainer = document.createElement('div');
+            printContainer.innerHTML = `<h1>选中单词默写表</h1>`;
+            
+            let table = `
+            <table class="word-table">
+                <thead>
+                    <tr>
+                        <th>英文单词</th>
+                        <th>我的答案</th>
+                        <th>标准答案</th>
+                    </tr>
+                </thead>
+                <tbody>
+            `;
+
+            selectedIndexes.forEach(idx => {
+                table += `
+                    <tr>
+                        <td>${wordList[idx].en}</td>
+                        <td><input type="text" class="my-answer" placeholder="填写中文"></td>
+                        <td><input type="text" class="correct-answer" value="${wordList[idx].cn}" readonly style="display:none;"></td>
+                    </tr>
+                `;
+            });
+
+            table += `</tbody></table>`;
+            printContainer.innerHTML += table;
+            document.body.appendChild(printContainer);
+            window.print();
+            document.body.removeChild(printContainer);
+        }
+
+        // 保存答案
+        function saveMyAnswer() {
+            const data = {};
+            wordList.forEach((_,i)=>{
+                const inp = document.getElementById(`my_${i}`);
+                if(inp) data[i] = inp.value.trim();
+            });
+            localStorage.setItem('my_word_answers', JSON.stringify(data));
+            alert('✅ 答案已保存！');
+        }
+
+        // 加载答案
+        function loadMyAnswer() {
+            const data = localStorage.getItem('my_word_answers');
+            if(!data) return;
+            const answers = JSON.parse(data);
+            wordList.forEach((_,i)=>{
+                const inp = document.getElementById(`my_${i}`);
+                if(inp && answers[i]) inp.value = answers[i];
+            });
+        }
+
+        // 显示/隐藏标准答案
+        function toggleCorrectAnswer() {
+            const answers = document.querySelectorAll('.correct-answer');
+            answers.forEach(ans => {
+                ans.style.display = ans.style.display === 'none' ? 'block' : 'none';
+            });
+        }
+
+        // 清空所有
+        function clearAll() {
+            if(!confirm('确定清空所有内容？')) return;
+            document.querySelectorAll('.my-answer').forEach(inp => inp.value = '');
+            document.querySelectorAll('.correct-answer').forEach(ans => ans.style.display = 'none');
+            document.querySelectorAll('.word-check').forEach(cb => cb.checked = false);
+            localStorage.removeItem('my_word_answers');
+            alert('🗑️ 已清空！');
+        }
+
+        window.onload = generateWordList;
+    </script>
+</body>
+</html>
