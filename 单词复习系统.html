@@ -74,13 +74,12 @@
         }
 
         button.warning {
-            background-color: #f39c12;
+            background-color: #f39c10;
         }
         button.warning:hover {
             background-color: #d35400;
         }
 
-        /* 文件导入样式 */
         .file-upload {
             padding: 6px 12px;
             border: 1px solid #ddd;
@@ -111,11 +110,6 @@
         .word-table td:nth-child(2),
         .word-table td:nth-child(3) {
             text-align: left;
-        }
-
-        .word-table td:last-child {
-            text-align: center;
-            width: 60px;
         }
 
         .my-answer {
@@ -181,7 +175,6 @@
                 color: transparent;
             }
             .correct-answer { display: none !important; }
-            td:last-child, th:last-child { display: none; }
         }
     </style>
 </head>
@@ -190,7 +183,6 @@
         <h1>自定义单词默写表（支持TXT导入）</h1>
         
         <div class="controls">
-            <!-- 新增：TXT文件导入 -->
             <input type="file" id="fileInput" class="file-upload" accept=".txt">
             <button onclick="printBlankSheet()">🖨️ 打印默写表</button>
             <button onclick="selectAll()">✅ 全选</button>
@@ -205,7 +197,6 @@
     </div>
 
     <script>
-        // 初始默认单词（导入后会自动替换）
         let wordList = [
             { en: "pyramid", cn: "金字塔" },
             { en: "graph", cn: "图表；曲线图" }
@@ -213,7 +204,7 @@
 
         const WORDS_PER_PAGE = 50;
 
-        // ============== 核心新增：TXT文件导入解析 ==============
+        // TXT文件导入
         document.getElementById('fileInput').addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (!file) return;
@@ -221,27 +212,18 @@
             const reader = new FileReader();
             reader.onload = function(event) {
                 try {
-                    // 解析文本：按行分割 + 过滤空行
                     const lines = event.target.result.split('\n').filter(line => line.trim() !== '');
                     const newWordList = [];
-
-                    // 按模板 英文=中文 解析
                     lines.forEach(line => {
                         const parts = line.trim().split('=');
                         if (parts.length === 2) {
-                            newWordList.push({
-                                en: parts[0].trim(),
-                                cn: parts[1].trim()
-                            });
+                            newWordList.push({ en: parts[0].trim(), cn: parts[1].trim() });
                         }
                     });
-
                     if (newWordList.length === 0) {
                         alert('⚠️ 未解析到有效单词，请检查TXT格式：每行 英文=中文');
                         return;
                     }
-
-                    // 替换单词列表并重新生成表格
                     wordList = newWordList;
                     generateWordList();
                     alert(`✅ 导入成功！共导入 ${wordList.length} 个单词`);
@@ -252,7 +234,7 @@
             reader.readAsText(file, 'UTF-8');
         });
 
-        // 生成默写表格
+        // 生成表格
         function generateWordList() {
             const container = document.getElementById('word-list-container');
             container.innerHTML = '';
@@ -260,7 +242,6 @@
 
             for (let page = 0; page < totalPages; page++) {
                 if (page > 0) container.innerHTML += '<div class="page-break"></div>';
-                
                 let table = `
                 <table class="word-table">
                     <thead>
@@ -273,10 +254,8 @@
                     </thead>
                     <tbody>
                 `;
-
                 const start = page * WORDS_PER_PAGE;
                 const end = Math.min(start + WORDS_PER_PAGE, wordList.length);
-
                 for (let i = start; i < end; i++) {
                     table += `
                         <tr>
@@ -287,31 +266,24 @@
                         </tr>
                     `;
                 }
-
                 table += `</tbody></table><div class="page-number">第 ${page+1} 页 / 共 ${totalPages} 页</div>`;
                 container.innerHTML += table;
             }
             loadMyAnswer();
         }
 
-        // 全选
-        function selectAll() {
-            document.querySelectorAll('.word-check').forEach(cb => cb.checked = true);
-        }
+        // 全选/取消全选
+        function selectAll() { document.querySelectorAll('.word-check').forEach(cb => cb.checked = true); }
+        function unselectAll() { document.querySelectorAll('.word-check').forEach(cb => cb.checked = false); }
 
-        // 取消全选
-        function unselectAll() {
-            document.querySelectorAll('.word-check').forEach(cb => cb.checked = false);
-        }
-
-        // 打印空白默写表
+        // 打印全部空白
         function printBlankSheet() {
             document.querySelectorAll('.my-answer').forEach(inp => inp.value = '');
             document.querySelectorAll('.correct-answer').forEach(ans => ans.style.display = 'none');
             setTimeout(() => window.print(), 100);
         }
 
-        // 打印选中单词
+        // ✅ 修复：打印选中单词 + 包含中文标准答案栏目 + 仅打印勾选
         function printSelectedWords() {
             const selectedChecks = document.querySelectorAll('.word-check:checked');
             if (selectedChecks.length === 0) {
@@ -319,11 +291,14 @@
                 return;
             }
 
+            // 隐藏原页面
+            const doms = [document.getElementById('word-list-container'), document.querySelector('.controls'), document.querySelector('h1')];
+            doms.forEach(item => item.style.display = 'none');
+
+            // 生成仅包含选中单词的表格（带中文标准答案列）
             const selectedIndexes = Array.from(selectedChecks).map(cb => cb.dataset.index);
             const printContainer = document.createElement('div');
-            printContainer.innerHTML = `<h1>选中单词默写表</h1>`;
-            
-            let table = `
+            printContainer.innerHTML = `<h1>选中单词默写表</h1>
             <table class="word-table">
                 <thead>
                     <tr>
@@ -332,54 +307,46 @@
                         <th>标准答案</th>
                     </tr>
                 </thead>
-                <tbody>
-            `;
+                <tbody>`;
 
             selectedIndexes.forEach(idx => {
-                table += `
+                printContainer.innerHTML += `
                     <tr>
                         <td>${wordList[idx].en}</td>
                         <td><input type="text" class="my-answer" placeholder="填写中文"></td>
-                        <td><input type="text" class="correct-answer" value="${wordList[idx].cn}" readonly style="display:none;"></td>
-                    </tr>
-                `;
+                        <td><input type="text" class="correct-answer" value="${wordList[idx].cn}" readonly></td>
+                    </tr>`;
             });
 
-            table += `</tbody></table>`;
-            printContainer.innerHTML += table;
+            printContainer.innerHTML += `</tbody></table>`;
             document.body.appendChild(printContainer);
-            window.print();
-            document.body.removeChild(printContainer);
+
+            // 执行打印
+            setTimeout(() => {
+                window.print();
+                // 恢复页面
+                document.body.removeChild(printContainer);
+                doms.forEach((item, i) => item.style.display = i === 1 ? 'flex' : 'block');
+            }, 100);
         }
 
-        // 保存答案
+        // 保存/加载答案
         function saveMyAnswer() {
             const data = {};
-            wordList.forEach((_,i)=>{
-                const inp = document.getElementById(`my_${i}`);
-                if(inp) data[i] = inp.value.trim();
-            });
+            wordList.forEach((_,i)=>{ const inp = document.getElementById(`my_${i}`); if(inp) data[i] = inp.value.trim(); });
             localStorage.setItem('my_word_answers', JSON.stringify(data));
             alert('✅ 答案已保存！');
         }
-
-        // 加载答案
         function loadMyAnswer() {
             const data = localStorage.getItem('my_word_answers');
             if(!data) return;
             const answers = JSON.parse(data);
-            wordList.forEach((_,i)=>{
-                const inp = document.getElementById(`my_${i}`);
-                if(inp && answers[i]) inp.value = answers[i];
-            });
+            wordList.forEach((_,i)=>{ const inp = document.getElementById(`my_${i}`); if(inp && answers[i]) inp.value = answers[i]; });
         }
 
-        // 显示/隐藏标准答案
+        // 显示/隐藏答案
         function toggleCorrectAnswer() {
-            const answers = document.querySelectorAll('.correct-answer');
-            answers.forEach(ans => {
-                ans.style.display = ans.style.display === 'none' ? 'block' : 'none';
-            });
+            document.querySelectorAll('.correct-answer').forEach(ans => ans.style.display = ans.style.display === 'none' ? 'block' : 'none');
         }
 
         // 清空所有
